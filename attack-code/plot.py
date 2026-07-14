@@ -13,25 +13,34 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import re
 import math
+import re
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 plot_colors = {
-    'running' : 'b',
-    'broken' : 'r',
-    'success' : 'g',
+    "running": "b",
+    "broken": "r",
+    "success": "g",
 }
 
-def plot_histograms(title, x_label, category_dict, bin_count=None, colors=plot_colors, alpha=.5, yscale=None):
+
+def plot_histograms(
+    title,
+    x_label,
+    category_dict,
+    bin_count=None,
+    colors=plot_colors,
+    alpha=0.5,
+    yscale=None,
+):
 
     total = sum(len(vs) for vs in category_dict.values())
 
     # calculate bins
     value_max = max(max(vs + [0]) for vs in category_dict.values())
-    value_min = min(min(vs + [0xffffffff]) for vs in category_dict.values())
+    value_min = min(min(vs + [0xFFFFFFFF]) for vs in category_dict.values())
 
     bin_start = value_min
     bin_end = value_max
@@ -40,34 +49,45 @@ def plot_histograms(title, x_label, category_dict, bin_count=None, colors=plot_c
     if bin_count:
         bin_delta = math.ceil(float(value_max - value_min) / bin_count)
 
-    bins = list(i - .5 for i in range(bin_start, bin_end+bin_delta, bin_delta))
+    # bins = list(i - .5 for i in range(bin_start, bin_end+bin_delta, bin_delta))
+    bins = list(i - 0.5 for i in range(bin_start, bin_end + bin_delta + 1, bin_delta))
 
     # plot histogramms
     fig = plt.figure()
 
     plt.title(title)
-    plt.ylabel(f'categorial frequency (of {total} in total)')
+    plt.ylabel(f"categorial frequency (of {total} in total)")
     if yscale:
         plt.yscale(yscale)
     plt.xlabel(x_label)
 
     ax = fig.gca()
 
-    for (name, values) in category_dict.items():
-        color = plot_colors.get(name) # returns None if not present
+    for name, values in category_dict.items():
+        color = plot_colors.get(name)  # returns None if not present
         ax.hist(values, bins=bins, label=name, color=color, alpha=alpha)
-    
+
     fig.legend()
     fig.show()
 
 
-def plot_stacked_bars(title, x_label, names, values, bin_count=None, colors=plot_colors, alpha=.5, yscale=None):
+def plot_stacked_bars(
+    title,
+    x_label,
+    names,
+    values,
+    bin_count=None,
+    colors=plot_colors,
+    alpha=0.5,
+    yscale=None,
+    show_percent=False,
+):
 
     total = sum(len(vs) for vs in values)
 
     # calculate bins
     value_max = max(max(vs + [0]) for vs in values)
-    value_min = min(min(vs + [0xffffffff]) for vs in values)
+    value_min = min(min(vs + [0xFFFFFFFF]) for vs in values)
 
     bin_start = value_min
     bin_end = value_max
@@ -76,64 +96,86 @@ def plot_stacked_bars(title, x_label, names, values, bin_count=None, colors=plot
     if bin_count:
         bin_delta = max(1, math.ceil(float(value_max - value_min) / bin_count))
 
-    locs = list(i + bin_delta/2.0 for i in range(bin_start, bin_end, bin_delta))
-    bins = list(i for i in range(bin_start, bin_end+1, bin_delta))
+    # locs = list(i + bin_delta/2.0 for i in range(bin_start, bin_end, bin_delta))
+    # bins = list(i for i in range(bin_start, bin_end+1, bin_delta))
+    bins = list(i for i in range(bin_start, bin_end + bin_delta + 1, bin_delta))
+    locs = np.array(bins[:-1]) + bin_delta / 2.0
 
     # get histogramms
     hists = [np.histogram(vs, bins=bins)[0] for vs in values]
+
+    if show_percent:
+        # convert counts to percentages per bin
+        bin_totals = np.sum(hists, axis=0)
+
+        percent_hists = [
+            np.divide(
+                hs * 100.0,
+                bin_totals,
+                out=np.zeros_like(hs, dtype=float),
+                where=bin_totals != 0,
+            )
+            for hs in hists
+        ]
 
     # plot bars
     fig = plt.figure()
 
     plt.title(title)
-    plt.ylabel(f'categorial shares (of {total} in total)')
+    plt.ylabel(
+        f"categorial shares (of {total} in total)" + " in %" if show_percent else ""
+    )
     if yscale:
         plt.yscale(yscale)
     plt.xlabel(x_label)
 
     ax = fig.gca()
 
-    bottom = np.array([0.0]*len(locs))
-    for (name, hs) in zip(names, hists):
-        color = plot_colors.get(name) # returns None if not present
+    bottom = np.array([0.0] * len(locs))
+    for name, hs in zip(names, percent_hists if show_percent else hists):
+        color = plot_colors.get(name)  # returns None if not present
         ax.bar(locs, hs, width=bin_delta, bottom=bottom, label=name, color=color)
         bottom += hs
-    
+
     fig.legend()
-    fig.show()
+    plt.show()
+
 
 def results_to_durations(results):
     return [r.duration for r in results]
 
-def plot_durations_hist(result_dict, title='Durations', **kwargs):
+
+def plot_durations_hist(result_dict, title="Durations", **kwargs):
 
     duration_dict = {}
-    for (name, results) in result_dict.items():
+    for name, results in result_dict.items():
         duration_dict[name] = results_to_durations(results)
 
-    plot_histograms(title, 'glitch duration (60 ~ 1 us)', duration_dict, **kwargs)
+    plot_histograms(title, "glitch duration (60 ~ 1 us)", duration_dict, **kwargs)
 
-def plot_durations_bar(names, results, title='Durations', **kwargs):
+
+def plot_durations_bar(names, results, title="Durations", **kwargs):
 
     values = [results_to_durations(results[name]) for name in names]
 
-    plot_stacked_bars(title, 'glitch duration (60 ~ 1 us)', names, values, **kwargs)
+    plot_stacked_bars(title, "glitch duration (60 ~ 1 us)", names, values, **kwargs)
+
 
 def results_to_delays(results):
     return [r.delay for r in results]
 
-def plot_delays_hist(result_dict, title='Delays', **kwargs):
+
+def plot_delays_hist(result_dict, title="Delays", **kwargs):
 
     delay_dict = {}
-    for (name, results) in result_dict.items():
+    for name, results in result_dict.items():
         delay_dict[name] = results_to_delays(results)
 
-    plot_histograms(title, 'glitch delay (60 ~ 1 us)', delay_dict, **kwargs)
+    plot_histograms(title, "glitch delay (60 ~ 1 us)", delay_dict, **kwargs)
 
-def plot_delays_bar(names, results, title='Delays', **kwargs):
+
+def plot_delays_bar(names, results, title="Delays", **kwargs):
 
     values = [results_to_delays(results[name]) for name in names]
 
-    plot_stacked_bars(title, 'glitch delay (60 ~ 1 us)', names, values, **kwargs)
-
-
+    plot_stacked_bars(title, "glitch delay (60 ~ 1 us)", names, values, **kwargs)

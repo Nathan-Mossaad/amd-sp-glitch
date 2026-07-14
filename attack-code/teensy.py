@@ -13,11 +13,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-import time
 import re
+import time
+
 import serial as pyserial
 
 DEBUG = False
+
 
 class TeensyClient:
     def __init__(self, device, baudrate=115200, timeout=2):
@@ -39,9 +41,7 @@ class TeensyClient:
     def connect(self):
         self.serial = None
         self.serial = pyserial.Serial(
-            self.device,
-            baudrate = self.baudrate,
-            timeout = self.timeout
+            self.device, baudrate=self.baudrate, timeout=self.timeout
         )
         self.clear()
 
@@ -53,37 +53,43 @@ class TeensyClient:
         if self.serial:
             self.serial.timeout = timeout
 
-    def cmd(self, cmd : str = None, timeout : int = 2) -> bytes:
+    def cmd(self, cmd: str = None, timeout: float = 0.6) -> bytes:
         self.set_timeout(timeout)
 
         if cmd:
-            self.serial.write(cmd.encode() + b'\r\n')
+            self.serial.write(cmd.encode() + b"\r\n")
 
-        prompt = b'\r\x1b[K> '
+        prompt = b"\r\x1b[K> "
         res = self.serial.read_until(prompt)
 
         if DEBUG:
             print(f"{cmd} --> {res}")
 
         if cmd:
-            if not res.startswith(cmd.encode() + b'\r\n'):
+            if not res.startswith(cmd.encode() + b"\r\n"):
                 print(f'Error: teensy didn\'t echo!\n"{cmd}" --> "{res}"')
                 return None
 
-            res = res[len(cmd)+2:]
+            res = res[len(cmd) + 2 :]
 
         if res.endswith(prompt):
-            res = res[:-len(prompt)]
+            res = res[: -len(prompt)]
         elif cmd:
             print(f'Error: didn\'t receive prompt!\n"{cmd}" --> "{res}"')
             return None
 
-        if res.endswith(b'\r\n'):
+        if res.endswith(b"\r\n"):
             res = res[:-2]
 
-        return res.decode('ascii', errors='backslachreplace')
+        result = res.decode("ascii", errors="backslachreplace")
 
-    def cmd_expect(self, cmd : str, expected: str, **kwargs) -> bool:
+        # ENDC = "\033[0m"
+        # OKBLUE = "\033[94m"
+        # print(OKBLUE + result + ENDC)
+
+        return result
+
+    def cmd_expect(self, cmd: str, expected: str, **kwargs) -> bool:
         message = self.cmd(cmd, **kwargs)
 
         if message != expected:
@@ -98,10 +104,10 @@ class TeensyClient:
     def wait_expect(self, expected: str, **kwargs) -> bool:
         message = self.wait(**kwargs)
 
-        if message.startswith('\r\n'):
+        if message.startswith("\r\n"):
             message = message[2:]
         else:
-            print('Warning: wait message didn\'t start with CRLF!')
+            print("Warning: wait message didn't start with CRLF!")
 
         if message != expected:
             print(f'Error: "{message}" instead of "{expected}"!')
@@ -116,10 +122,10 @@ class TeensyClient:
             print(f'Error: timeout instead of "{expected}"!')
             return None
 
-        if message.startswith('\r\n'):
+        if message.startswith("\r\n"):
             message = message[2:]
         else:
-            print('Warning: wait message didn\'t start with CRLF!')
+            print("Warning: wait message didn't start with CRLF!")
 
         result = expected.match(message)
 
@@ -132,24 +138,24 @@ class TeensyClient:
         for _ in range(10):
             try:
                 self.serial.reset_input_buffer()
-                time.sleep(.2)
+                time.sleep(0.2)
                 break
             except:
                 pass
 
-        time.sleep(.2)
+        # time.sleep(0.2)
 
-        return self.cmd_expect('', '')
+        return self.cmd_expect("", "")
 
-    def set(self, module : str, param : str, value : str, **kwargs) -> bool:
-        return self.cmd_expect(f'set {module} {param} {value}', '', **kwargs)
+    def set(self, module: str, param: str, value: str, **kwargs) -> bool:
+        return self.cmd_expect(f"set {module} {param} {value}", "", **kwargs)
 
     def wait_for_restart(self, **kwargs) -> bool:
         if self.wait_expect(
-            'Restart detected!\r\n'
-            'Setting VSoc!\r\n'
-            'Setting VCore and disabling telemetry!',
-            **kwargs
+            "Restart detected!\r\n"
+            "Setting VSoc!\r\n"
+            "Setting VCore and disabling telemetry!",
+            **kwargs,
         ):
             self.last_reset = time.time()
             return True
@@ -157,67 +163,66 @@ class TeensyClient:
 
     def reset_target(self, **kwargs) -> bool:
         if self.last_reset:
-            while time.time() < self.last_reset + 3.0:
-                time.sleep(.1)
-        if not self.cmd_expect('restart reset', 'Resetting target!'):
+            # while time.time() < self.last_reset + 3.0:
+            while time.time() < self.last_reset:
+                time.sleep(0.1)
+        if not self.cmd_expect("restart reset", "Resetting target!"):
             return False
-        if not self.wait_expect('Target is now offline!'):
+        if not self.wait_expect("Target is now offline!"):
             return False
         return self.wait_for_restart(**kwargs)
 
     def arm_glitch(self, **kwargs) -> bool:
-        return self.cmd_expect('glitch arm', 'Glitch armed!', **kwargs)
+        return self.cmd_expect("glitch arm", "Glitch armed!", **kwargs)
 
     def arm_attack(self, **kwargs) -> bool:
-        return self.cmd_expect('attack', 'Attack armed!', **kwargs)
+        return self.cmd_expect("attack", "Attack armed!", **kwargs)
 
-    __glitch_re = re.compile(
-        'Glitch triggered!\r\n'
-        'Target ([a-z ]*)!'
-    )
+    __glitch_re = re.compile("Glitch triggered!\r\n" "Target ([a-z ]*)!")
 
     def wait_for_glitch(self, **kwargs) -> str:
         return self.wait_match(self.__glitch_re, **kwargs)
 
     __attack_re = re.compile(
-        'Attack triggered!\r\n'
-        'Target ([a-z ]*)!'
+        "Attack triggered!\r\n(Chip-Select was low at glitch time!\r\n)?"
+        "Target ([a-z ]*)!"
     )
 
     def wait_for_attack(self, **kwargs) -> str:
         return self.wait_match(self.__attack_re, **kwargs)
 
-    def glitch(self,
-        vid : int,
-        delay : int,
-        duration : int,
-        cooldown : int = None,
-        repeats : int = None,
-        **kwargs
+    def glitch(
+        self,
+        vid: int,
+        delay: int,
+        duration: int,
+        cooldown: int = None,
+        repeats: int = None,
+        **kwargs,
     ) -> str:
 
         if self.glitch_vid != vid:
-            if not self.set('glitch', 'vid', vid, **kwargs):
+            if not self.set("glitch", "vid", vid, **kwargs):
                 return None
             self.glitch_vid = vid
 
         if self.glitch_delay != delay:
-            if not self.set('glitch', 'delay', delay, **kwargs):
+            if not self.set("glitch", "delay", delay, **kwargs):
                 return None
             self.glitch_delay = delay
 
         if self.glitch_duration != duration:
-            if not self.set('glitch', 'duration', duration, **kwargs):
+            if not self.set("glitch", "duration", duration, **kwargs):
                 return None
             self.glitch_duration = duration
 
         if cooldown and self.glitch_cooldown != cooldown:
-            if not self.set('glitch', 'cooldown', cooldown, **kwargs):
+            if not self.set("glitch", "cooldown", cooldown, **kwargs):
                 return None
             self.glitch_cooldown = cooldown
 
         if repeats and self.glitch_repeats != repeats:
-            if not self.set('glitch', 'repeats', repeats, **kwargs):
+            if not self.set("glitch", "repeats", repeats, **kwargs):
                 return None
             self.glitch_repeats = repeats
 
@@ -230,42 +235,43 @@ class TeensyClient:
             return None
 
         return {
-            'continues running' : 'running',
-            'glitched successfully' : 'glitch',
-            'is broken' : 'broken',
-        } [match[1]]
+            "continues running": "running",
+            "glitched successfully": "glitch",
+            "is broken": "broken",
+        }[match[1]]
 
-    def attack(self,
-        waits : int,
-        vid : int,
-        delay : int,
-        duration : int,
-        cooldown : int = None,
-        **kwargs
+    def attack(
+        self,
+        waits: int,
+        vid: int,
+        delay: int,
+        duration: int,
+        cooldown: int = None,
+        **kwargs,
     ) -> str:
 
         if self.attack_waits != waits:
-            if not self.set('attack', 'waits', waits, **kwargs):
+            if not self.set("attack", "waits", waits, **kwargs):
                 return None
             self.attack_waits = waits
 
         if self.glitch_vid != vid:
-            if not self.set('glitch', 'vid', vid, **kwargs):
+            if not self.set("glitch", "vid", vid, **kwargs):
                 return None
             self.glitch_vid = vid
 
         if self.glitch_delay != delay:
-            if not self.set('glitch', 'delay', delay, **kwargs):
+            if not self.set("glitch", "delay", delay, **kwargs):
                 return None
             self.glitch_delay = delay
 
         if self.glitch_duration != duration:
-            if not self.set('glitch', 'duration', duration, **kwargs):
+            if not self.set("glitch", "duration", duration, **kwargs):
                 return None
             self.glitch_duration = duration
 
         if cooldown and self.glitch_cooldown != cooldown:
-            if not self.set('glitch', 'cooldown', cooldown, **kwargs):
+            if not self.set("glitch", "cooldown", cooldown, **kwargs):
                 return None
             self.glitch_cooldown = cooldown
 
@@ -280,13 +286,14 @@ class TeensyClient:
             return None
 
         return {
-            'continues running' : 'running',
-            'glitched successfully' : 'success',
-            'is broken' : 'broken',
-        } [match[1]]
+            "continues running": "running",
+            "glitched successfully": "success",
+            "is broken": "broken",
+        }[match[2]]
+
 
 class GlitchSetup:
-    def __init__(self, teensy, use_core = False, hw_cfg=1):
+    def __init__(self, teensy, use_core=False, hw_cfg=1):
 
         self.use_core = use_core
 
@@ -298,36 +305,45 @@ class GlitchSetup:
     def start(self):
         self.teensy.connect()
         self.teensy.wait()
-        print(self.teensy.cmd(f'set hw config {self.hw_cfg}'))
+        print(self.teensy.cmd(f"set hw config {self.hw_cfg}"))
         if self.use_core:
-            print(self.teensy.cmd(f'set glitch set_soc false'))
-            print(self.teensy.cmd(f'set glitch set_core true'))
+            print(self.teensy.cmd(f"set glitch set_soc false"))
+            print(self.teensy.cmd(f"set glitch set_core true"))  #
+        else:
+            print(self.teensy.cmd(f"set glitch set_soc true"))
+            print(self.teensy.cmd(f"set glitch set_core false"))  #
         self.teensy.clear()
-        time.sleep(.2)
+        time.sleep(0.2)
 
-    def attack(self,
-        waits : int,
-        vid : int,
-        delay : int,
-        duration : int,
-        **kwargs
-    ) -> str:
+    def attack(self, waits: int, vid: int, delay: int, duration: int, **kwargs) -> str:
 
         result = self.teensy.attack(waits, vid, delay, duration, **kwargs)
 
         if not result:
             return None
 
-        if result not in ['running', 'success', 'broken']:
+        if result not in ["running", "success", "broken"]:
             print(f'Error: Unknown result "{result}"!')
             self.teensy.clear()
             return None
 
         return result
 
-    def attack_range(self, count, waits, vid, delay_min, delay_max, dur_min, dur_max, exit_on_success=False, **kwargs):
+    def attack_range(
+        self,
+        count,
+        waits,
+        vid,
+        delay_min,
+        delay_max,
+        dur_min,
+        dur_max,
+        exit_on_success=False,
+        **kwargs,
+    ):
 
         import numpy as np
+
         r = np.random.default_rng(int(time.time()))
 
         delays = r.integers(delay_min, delay_max, count)
@@ -342,7 +358,7 @@ class GlitchSetup:
             result = self.attack(waits, vid, delay, duration, **kwargs)
 
             if result:
-                print(f'({waits}, {vid}, {delay}, {duration}) => {result}')
+                print(f"({waits}, {vid}, {delay}, {duration}) => {result}")
                 if exit_on_success:
-                    if result[0] == 'success':
-                        return 'success'
+                    if result == "success":
+                        return "success"
