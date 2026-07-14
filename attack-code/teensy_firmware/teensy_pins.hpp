@@ -304,8 +304,8 @@ inline SetupScopeGuard TemporarySetup(Setup setup) {
 } /* namespace Gpio */
 
 #define MAKE_PAD(NR, NAME, BANK, BIT) \
-constexpr Pad::Hardware Pad ## NR  = { (Pad::Registers*) &IOMUXC_SW_MUX_CTL_PAD_GPIO_ ## NAME }; \
-constexpr Gpio::Hardware Gpio ## NR () { return Gpio::Hardware(Pad ## NR, BANK, BIT); }
+inline Pad::Hardware Pad ## NR  = { (Pad::Registers*) &IOMUXC_SW_MUX_CTL_PAD_GPIO_ ## NAME }; \
+inline Gpio::Hardware Gpio ## NR () { return Gpio::Hardware(Pad ## NR, BANK, BIT); }
 
 MAKE_PAD(   0,  AD_B0_03,   0,  3   );
 MAKE_PAD(   1,  AD_B0_02,   0,  2   );

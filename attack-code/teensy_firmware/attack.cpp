@@ -73,10 +73,10 @@ void attack_process_trigger() {
     for (uint32_t i = 0; i < attack_waits; i++) {
 
         // longest example found was 33 us
-        timeout = rough_busy_wait_us(100);
         do {
+            timeout = rough_busy_wait_us(100);
             BUSY_LOOP_WHILE_PIN_LOW(attack_cs_low, timeout, hw.cs_pin);
-        } while (hw.cs_pin.is_low() && hw.cs_pin.is_low());
+        } while (timeout > 0 && hw.cs_pin.is_low() && hw.cs_pin.is_low());
         hw_trigger_attack_set_low();
 
         if (timeout == 0) {
@@ -88,9 +88,9 @@ void attack_process_trigger() {
 
         // longest example found was 15 us
         do {
-            timeout = rough_busy_wait_us(50);
+            timeout = rough_busy_wait_us(100);
             BUSY_LOOP_WHILE_PIN_HIGH(attack_cs_high, timeout, hw.cs_pin);
-        } while (hw.cs_pin.is_high() && hw.cs_pin.is_high());
+        } while (timeout > 0 && hw.cs_pin.is_high() && hw.cs_pin.is_high());
         hw_trigger_attack_set_high();
 
         if (timeout == 0) {
